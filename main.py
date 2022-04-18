@@ -2,8 +2,10 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-from k_means import kmeans
 import utils
+from metaheuristic_algos import metaheuristic
+from k_means import kmeans
+
 
 
 def main():
