@@ -39,6 +39,40 @@ def create_first_point(D, low, up):
     output = np.random.uniform(low,up,size=(1,D))
     return output
 
+def distance(firefly1, firefly2):
+    """
+    Calculates the distance between two fireflies
+    :param firefly1: solution vector 1
+    :param firefly2: solution vector 2
+    :return: distance between firefly1 and firefly2
+    """
+    return np.linalg.norm(firefly1 - firefly2)
+
+
+def intensity(beta_0, gamma, distance, firefly1, firefly2):
+    """
+    Calculates the intensity of a firefly
+    :param beta_0: initial intensity
+    :param gamma: light absorption coefficient
+    :param distance: distance between firefly1 and firefly2
+    :param firefly1: solution vector 1
+    :param firefly2: solution vector 2
+    :return: intensity of firefly 2 wrt firefly 1
+    """
+    return beta_0 / (1 + gamma * distance(firefly1, firefly2) ** 2)
+
+
+def find_best_solution(f, population):
+    """
+    Finds the best solution in a population
+    :param f: objective function
+    :param population: solution vectors
+    :return: the best fitness, the best solution, fitness of population
+    """
+    population_fitness = f(population)
+    best_ind = np.argmax(population_fitness)
+    return population_fitness[best_ind], population[best_ind], population_fitness
+
 def simulated_annealing(f,lower_bound,upper_bound,D,N,To,beta,step):
 
     ''' Simulated Annealing
@@ -206,3 +240,94 @@ def PSO(f,low,up,D,N,alpha,beta,n):
             bestf = f(X[[i]])
             bestsol = X[[i]]
     return bestsol
+
+def firefly_optimization(f, D, lower_bound, upper_bound, pop_size, hyperparams, max_iter):
+    """
+    Implements the Firefly Algorithm.
+    :param f: objective function
+    :param D: dimension of solution vectors
+    :param lower_bound: lower bound of solution vectors
+    :param upper_bound: upper bound of solution vectors
+    :param pop_size: population size
+    :param hyperparams: list containing hyperparameters: gamma, lambda_0, beta_0
+    :param max_iter: maximum number of iterations
+    :return: best solution found, best fitness
+    """
+    [gamma, lambda_0, beta_0] = hyperparams
+    population = np.clip(np.random.normal(0, np.abs(upper_bound - lower_bound) / 4, (pop_size, D)),
+                         lower_bound, upper_bound)
+    global_best_fitness, global_best_solution, population_fitness = find_best_solution(f, population)
+
+    idx = 0
+    while idx < max_iter:
+        for i in range(pop_size):
+            for j in range(pop_size):
+                j_intensity = intensity(population_fitness[j] * beta_0, gamma, distance, population[i], population[j])
+                if population_fitness[i] < j_intensity:
+                    population[i] = population[i] + intensity(beta_0, gamma, distance, population[i], population[j]) * \
+                                    (population[j] - population[i]) + \
+                                    (lambda_0 ** idx) * np.random.normal(0, 1, D)
+
+        population = np.clip(population, lower_bound, upper_bound)
+        cur_best_fitness, cur_best_solution, population_fitness = find_best_solution(f, population)
+        if cur_best_fitness > global_best_fitness:
+            global_best_fitness = cur_best_fitness
+            global_best_solution = cur_best_solution
+
+        idx += 1
+
+    return global_best_solution, global_best_fitness
+
+
+def bat_optimization(f, D, lower_bound, upper_bound, pop_size, hyperparams, max_iter):
+    """
+    Implements the Bat Algorithm.
+    :param f: objective function
+    :param D: dimension of solution vectors
+    :param lower_bound: lower bound of solution vectors
+    :param upper_bound: upper bound of solution vectors
+    :param pop_size: population size
+    :param hyperparams: list containing hyperparameters: f_max, alpha, gamma
+    :param max_iter: maximum number of iterations
+    :return: best solution found, best fitness
+    """
+    [f_max, alpha, gamma] = hyperparams
+    f_min = 0
+    sigma = 0.01
+    rf = 1
+
+    population = np.clip(np.random.normal(0, np.abs(upper_bound - lower_bound) / 4, (pop_size, D)),
+                         lower_bound, upper_bound)
+    global_best_fitness, global_best_solution, population_fitness = find_best_solution(f, population)
+    velocity = np.zeros((pop_size, D))
+    loudness = np.ones(pop_size)
+    pulse_rate = np.ones(pop_size) * 0.5
+
+    idx = 0
+    while idx < max_iter:
+        for i in range(pop_size):
+            freq_i = f_min + (f_max - f_min) * np.random.uniform(0, 1)
+            velocity[i] = velocity[i] + (population[i] - global_best_solution) * freq_i
+            temp_bat = population[i] + velocity[i]
+
+            if np.random.uniform(0, 1) > pulse_rate[i]:
+                temp_bat = global_best_solution + sigma * np.random.normal(0, 1, D)
+
+            fitness = f(np.expand_dims(temp_bat, 0))
+            if fitness > population_fitness[i] and np.random.uniform(0, 1) < loudness[i]:
+                population[i] = temp_bat
+                population_fitness[i] = fitness
+
+            loudness[i] = alpha * loudness[i]
+            pulse_rate[i] = rf * (1 - np.exp(-gamma * idx))
+
+        population = np.clip(population, lower_bound, upper_bound)
+        cur_best_fitness, cur_best_solution, population_fitness = find_best_solution(f, population)
+        if cur_best_fitness > global_best_fitness:
+            global_best_fitness = cur_best_fitness
+            global_best_solution = cur_best_solution
+
+        idx += 1
+
+    return global_best_solution, global_best_fitness
+
