@@ -39,7 +39,10 @@ def getImageFeatures(img, colorSpace, types=1):
 
 def colorSegmentedImage(img,seg):
     out_im = copy(img)
-    for class_ in range(int(np.max(seg)+1)):
+    num_clusters = int(np.max(seg)+1)
+    cluster_centroids = np.empty((num_clusters, img.shape[2]))
+    for class_ in range(num_clusters):
         pix_indexes = np.argwhere(seg==class_)
-        out_im[pix_indexes[:,0],pix_indexes[:,1]] = np.mean(img[pix_indexes[:,0],pix_indexes[:,1]],axis=0)
-    return out_im
+        cluster_centroids[class_] = np.mean(img[pix_indexes[:,0],pix_indexes[:,1]],axis=0)
+        out_im[pix_indexes[:,0],pix_indexes[:,1]] = cluster_centroids[class_]
+    return out_im, cluster_centroids
