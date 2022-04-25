@@ -124,7 +124,7 @@ def simulated_annealing(f,lower_bound,upper_bound,D,N,To,beta,step):
             bestsol = currentsol
             bestfvalue = f(currentsol)
 
-    return bestsol
+    return bestsol, bestfvalue
 
 def differential_evolution(f,low,up,D,N,F,Cr,n):
     ''' Differential Evolution
@@ -176,7 +176,7 @@ def differential_evolution(f,low,up,D,N,F,Cr,n):
         if f(X[[i]])<bestf:
             bestf = f(X[[i]])
             bestsol = X[[i]]
-    return bestsol
+    return bestsol, bestf
 
 
 def PSO(f,low,up,D,N,alpha,beta,n):
@@ -239,7 +239,7 @@ def PSO(f,low,up,D,N,alpha,beta,n):
         if f(X[[i]])<bestf:
             bestf = f(X[[i]])
             bestsol = X[[i]]
-    return bestsol
+    return bestsol, bestf
 
 def firefly_optimization(f, D, lower_bound, upper_bound, pop_size, hyperparams, max_iter):
     """
