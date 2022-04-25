@@ -8,6 +8,8 @@ from metaheuristic_algos import metaheuristic
 from k_means import kmeans
 from metrics import *
 
+SEED=128
+np.random.seed(SEED)
 
 def main():
     ## Get image
@@ -43,14 +45,9 @@ def main():
     print(f"PSNR: {metrics.PSNR(img/255, img_seg)}")
     print(f"Inter-cluster distance: {metrics.inter_cluster_distance(cluster_centroids)}")
     print(f"Intra-cluster distance: {metrics.intra_cluster_distance(img/255, mask, cluster_centroids)}")
-
-    # Plot segmented image
-    plt.figure()
-    plt.imshow(img_seg[:, :, ::-1])
-    plt.title('{} clusters'.format(num_clusters))
-    plt.axis('off')
-    plt.savefig('results/{}_segmented.jpg'.format(img_name))
-    plt.show()
+    
+    # Save segmented image
+    cv2.imwrite('results/{}_{}_clusters.jpg'.format(img_name,num_clusters), img_seg*255)
 
     return None
 
