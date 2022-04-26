@@ -1,0 +1,6 @@
+cameraman
+PSO 4 clusters
+Number of trials 5
+PSNR: 21.83335142511086 +- 1.3805430179364446
+Inter-cluster distance: 0.15304343482185892 +- 0.04136718387751062
+Intra-cluster distance: 0.12786951771654437 +- 0.01588327878791265

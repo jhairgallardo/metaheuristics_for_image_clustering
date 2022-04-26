@@ -1,0 +1,1 @@
+{'name': 'SA', 'init_temp': 10, 'beta': 0.8, 'iter': 1000, 'clusters': 4}

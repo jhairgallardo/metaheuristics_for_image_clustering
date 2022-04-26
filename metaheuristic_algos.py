@@ -1,8 +1,88 @@
-from cmath import inf
 import numpy as np
+from scipy.spatial import distance_matrix
 
-def metaheuristic(datapoints, algo, F, num_clusters):
-    pass
+
+
+def metaheuristic(datapoints, algo, num_clusters):
+
+    ### Define fitness function
+    def fitness_function(centroids):
+        '''
+        Implements Fitness function based on the quantization error
+        https://ieeexplore.ieee.org/document/1299577
+        :param centroids: set of clusters solution
+        Note: We want to minimize this function
+        '''
+        # Reshape centroids 
+        centroids = centroids.reshape(num_clusters,datapoints.shape[1])
+        # Assign cluster to datapoints
+        SAD = [] # Sum of absolute distance
+        for c in centroids:
+            SAD.append(np.sum(np.abs(datapoints-c),axis=1))
+        labels = np.argmin(SAD,axis=0)
+
+        # Calculate the Quantization error
+        cluster_distances = [np.sum(distance_matrix(datapoints[labels == i],
+                         np.expand_dims(centroids[i], axis=0)))/len(labels[labels == i])
+                         for i in range(len(centroids))]
+        # Sometimes a cluster won't have points, returning a nan for its distance
+        # I am replacing that nan with Inf, since we don't want those types of
+        # solutions
+        cluster_distances = np.nan_to_num(cluster_distances, nan=np.inf)
+        fitness = np.mean(cluster_distances)
+        return fitness
+
+    ## Parameters for all algorithms
+    D=num_clusters*datapoints.shape[1]
+    # TODO: double check if this idea for low and up is ok.
+    low= np.min(datapoints)
+    up = np.max(datapoints)
+
+    ## PSO
+    if algo['name'] == 'PSO':
+        iter = algo['iter'] # number of iterations
+        alpha, beta = algo['alpha'], algo['beta']
+        n = algo['pop_size'] # number of particles
+        centroids, bestf = PSO(fitness_function,low,up,D,iter,alpha,beta,n)
+    
+    elif algo['name'] == 'DE':
+        iter = algo['iter'] # number of iterations
+        F, Cr = algo['F'], algo['Cr']
+        n = algo['pop_size'] # population size
+        centroids, bestf = differential_evolution(fitness_function,low,up,D,iter,F,Cr,n)
+    
+    elif algo['name'] == 'SA':
+        iter = algo['iter'] # number of iterations
+        To = algo['init_temp']
+        beta = algo['beta']
+        centroids, bestf = simulated_annealing(fitness_function,low,up,D,iter,To,beta,step=0.1)
+    
+    elif algo['name'] == 'FA':
+        iter = algo['iter'] # number of iterations
+        gamma = algo['gamma']
+        alpha = algo['alpha']
+        beta = algo['beta']
+        n = algo['pop_size'] # number of fireflies
+        centroids, bestf = firefly(fitness_function,low,up,D,iter,gamma,alpha,beta,n,flip_f=True)
+
+    elif algo['name'] == 'BA':
+        iter = algo['iter'] # number of iterations
+        alpha = algo['alpha']
+        gamma = algo['gamma']
+        n = algo['pop_size'] # number of bats
+        centroids, bestf = bats(fitness_function,low,up,D,iter,alpha,gamma,n)
+
+    else:
+        return None, None
+
+    # Reshape centroids
+    centroids = centroids.reshape(num_clusters,datapoints.shape[1])
+    # Get labels
+    SAD = []
+    for centroid in centroids:
+        SAD.append(np.sum(np.abs(datapoints-centroid),axis=1))
+    labels = np.argmin(SAD,axis=0)
+    return labels, centroids
 
 def generate_random_sols(D, low, up, n):
     ''' Randomly create a set of solutions
@@ -39,40 +119,6 @@ def create_first_point(D, low, up):
     output = np.random.uniform(low,up,size=(1,D))
     return output
 
-def distance(firefly1, firefly2):
-    """
-    Calculates the distance between two fireflies
-    :param firefly1: solution vector 1
-    :param firefly2: solution vector 2
-    :return: distance between firefly1 and firefly2
-    """
-    return np.linalg.norm(firefly1 - firefly2)
-
-
-def intensity(beta_0, gamma, distance, firefly1, firefly2):
-    """
-    Calculates the intensity of a firefly
-    :param beta_0: initial intensity
-    :param gamma: light absorption coefficient
-    :param distance: distance between firefly1 and firefly2
-    :param firefly1: solution vector 1
-    :param firefly2: solution vector 2
-    :return: intensity of firefly 2 wrt firefly 1
-    """
-    return beta_0 / (1 + gamma * distance(firefly1, firefly2) ** 2)
-
-
-def find_best_solution(f, population):
-    """
-    Finds the best solution in a population
-    :param f: objective function
-    :param population: solution vectors
-    :return: the best fitness, the best solution, fitness of population
-    """
-    population_fitness = f(population)
-    best_ind = np.argmax(population_fitness)
-    return population_fitness[best_ind], population[best_ind], population_fitness
-
 def simulated_annealing(f,lower_bound,upper_bound,D,N,To,beta,step):
 
     ''' Simulated Annealing
@@ -92,7 +138,14 @@ def simulated_annealing(f,lower_bound,upper_bound,D,N,To,beta,step):
 
     ### create an initial solution
     currentsol = create_first_point(D,lower_bound,upper_bound)
+    # if initial solution results on inf fitness function 
+    # (maybe one cluster doesn't have any datapoints)
+    # reset init values until it is not inf
+    while f(currentsol) == np.inf: 
+        currentsol = create_first_point(D,lower_bound,upper_bound)
     bestsol, bestfvalue = currentsol, f(currentsol)
+
+    print('\t best fitness:',bestfvalue)
 
     for t in range(N):
         ### Get temperature
@@ -101,13 +154,7 @@ def simulated_annealing(f,lower_bound,upper_bound,D,N,To,beta,step):
         ### Perform random walk
         epsilon = np.random.normal(loc=0,scale=step,size=currentsol.shape)
         candidatesol = currentsol + epsilon
-        # make sure the candidate does not go over bounds
-        while candidatesol[0][0]<lower_bound or candidatesol[0][0]>upper_bound or \
-            candidatesol[0][1]<lower_bound or candidatesol[0][1]>upper_bound:
-            # continue replacing the generated candiate until it meets the
-            # solution space bound criteria
-            epsilon = np.random.normal(loc=0,scale=step,size=currentsol.shape)
-            candidatesol = currentsol + epsilon
+        candidatesol = np.clip(candidatesol,lower_bound,upper_bound) # make sure it stay in bounds
 
         ### Update current solution
         diff = f(candidatesol) - f(currentsol)
@@ -123,6 +170,8 @@ def simulated_annealing(f,lower_bound,upper_bound,D,N,To,beta,step):
         if f(currentsol)<bestfvalue:
             bestsol = currentsol
             bestfvalue = f(currentsol)
+        
+        print('\t best fitness:',bestfvalue)
 
     return bestsol, bestfvalue
 
@@ -144,6 +193,13 @@ def differential_evolution(f,low,up,D,N,F,Cr,n):
     
     # Initialize the population x with randomly generated solutions
     X = generate_random_sols(D,low,up,n)
+    # Find best current global solution
+    bestf = np.inf
+    for i in range(n):
+        if f(X[[i]])<bestf:
+            bestf = f(X[[i]])
+            bestsol = X[[i]]
+    print('\t best fitness:',bestf)
 
     t=0
     while t<N:
@@ -158,10 +214,10 @@ def differential_evolution(f,low,up,D,N,F,Cr,n):
             v = np.clip(v,low,up) # make sure it stay in bounds
             # Generate random index
             Jr = np.random.choice(D)
-            # Generate random distributed number r
-            r = np.random.uniform(0,1)
             u = np.zeros((1,D))
             for j in range(D):
+                # Generate random distributed number r
+                r = np.random.uniform(0,1)
                 if r <= Cr or j==Jr:
                     u[0,j] = v[0,j]
                 else:
@@ -169,13 +225,22 @@ def differential_evolution(f,low,up,D,N,F,Cr,n):
             # Select and update the solution
             if f(u) < f(X[[i]]):
                 X[i] = u[0]
+
+        # Find best current global solution
+        iter_bestf = np.inf
+        for i in range(n):
+            if f(X[[i]])<iter_bestf:
+                iter_bestf = f(X[[i]])
+                iter_bestsol = X[[i]]
+
+        # If iteration best solution is better than previous ones
+        # update
+        if iter_bestf < bestf:
+            bestf = iter_bestf
+            bestsol = iter_bestsol
+
+        print('\t best fitness:',bestf)
         t = t +1
-    # Return the best solution in the population
-    bestf = np.inf
-    for i in range(n):
-        if f(X[[i]])<bestf:
-            bestf = f(X[[i]])
-            bestsol = X[[i]]
     return bestsol, bestf
 
 
@@ -201,13 +266,17 @@ def PSO(f,low,up,D,N,alpha,beta,n):
     V = np.zeros(X.shape)
     # Find best current global solution
     bestf = np.inf
+    g = X[[0]]
     for i in range(n):
         if f(X[[i]])<bestf:
             bestf = f(X[[i]])
+            bestsol = X[[i]]
             g = X[[i]]
     # Initialize current best for each particle 
     # as their own position (X current best: Xcb)
     Xcb = np.array(X)
+
+    print('\t best fitness:',bestf)
 
     t=0
     while t<N:
@@ -219,115 +288,173 @@ def PSO(f,low,up,D,N,alpha,beta,n):
             social = alpha*e1*(g[0]-X[i])
             cognitive = beta*e2*(Xcb[i] -X[i])
             V[i] = V[i] + social + cognitive
-            V[i] = np.clip(V[i],low/20,up/20) # clip velocity (small steps)
+            V[i] = np.clip(V[i],-up/5,up/5) # clip velocity (small steps)
             # Calculate new locations
             X[i] = X[i] + V[i]
             X[i] = np.clip(X[i],low,up) # make sure it stay in bounds
             # Find the current best of the particle
             if f(X[[i]]) < f(Xcb[[i]]):
                 Xcb[i] = X[i]
+        
         # Find best current global solution
-        bestf = np.inf
+        iter_bestf = np.inf
+        for i in range(n):
+            if f(X[[i]])<iter_bestf:
+                iter_bestf = f(X[[i]])
+                iter_bestsol = X[[i]]
+                g = X[[i]]
+
+        # If iteration best solution is better than previous ones
+        # update
+        if iter_bestf < bestf:
+            bestf = iter_bestf
+            bestsol = iter_bestsol
+
+        print('\t best fitness:',bestf)
+        t = t +1
+    return bestsol, bestf
+
+def firefly(func,low,up,D,N,gamma,alpha,beta,n,flip_f=False):
+    ''' Firefly Algorithm (FA)
+    It expects a maximization problem. For functions with global minima,
+    use the flip_f argument as True.
+
+    Inputs
+    f: funct - Cost function to be optimized
+    low: lower bound of the solution space
+    up: upper bound of the solution space
+    D: int - dimensionality of solution space
+    N: number of iterations
+    gamma: light absorbtion coefficient
+    alpha: exploration coefficient
+    beta: attractiveness
+    n: int - solution population size
+    flip_f: boolean - Flag to flip minimization problems into maximization
+
+    Outputs
+    bestsol: vector - best solution vector in the solution space
+    '''
+    if flip_f:
+        f = lambda var: -1*func(var)
+    else:
+        f =func
+
+    # Generate fireflies (random initial solutions) 
+    X = generate_random_sols(D,low,up,n)
+    # Find best current global solution
+    bestf = -np.inf
+    for i in range(n):
+        if f(X[[i]])>bestf:
+            bestf = f(X[[i]])
+            bestsol = X[[i]]
+    print('\t best fitness:',bestf)
+
+    t=0
+    while t<N:
+        for i in range(n):
+            for j in range(n):
+                Ii = f(X[[i]])
+                Ij = f(X[[j]])
+                if Ii < Ij:
+                    rij = np.sqrt(np.sum((X[i]-X[j])**2))
+                    eps = np.random.normal(size=(1,D))
+                    # Move xi towards xj
+                    X[i] = X[i] + beta*np.exp(-gamma*rij**2)*(X[j]-X[i]) + alpha*eps
+                    # Clip values to boundaries
+                    X[i] = np.clip(X[i],low,up)
+        # Find best current global solution
+        iter_bestf = -np.inf
+        for i in range(n):
+            if f(X[[i]])>iter_bestf:
+                iter_bestf = f(X[[i]])
+                iter_bestsol = X[[i]]
+
+        # If iteration best solution is better than previous ones
+        # update
+        if iter_bestf > bestf:
+            bestf = iter_bestf
+            bestsol = iter_bestsol
+
+        print('\t best fitness:',bestf)
+        t = t + 1
+    return bestsol, bestf
+
+def bats(f,low,up,D,N,alpha,gamma,n):
+    ''' Bat Algorithm (BA)
+    Inputs
+    f: funct - Cost function to be optimized
+    low: lower bound of the solution space
+    up: upper bound of the solution space
+    D: int - dimensionality of solution space
+    N: number of iterations
+    alpha: loudness
+    gamma: pulse rates
+    n: int - solution population size
+
+    Outputs
+    bestsol: vector - best solution vector in the solution space
+    '''
+
+    # Generate bats (random initial solutions) 
+    # make sure you don't get a bestf = inf with intial solutions
+    bestf = np.inf
+    while bestf == np.inf:
+        X = generate_random_sols(D,low,up,n)
         for i in range(n):
             if f(X[[i]])<bestf:
                 bestf = f(X[[i]])
-                g = X[[i]]
-        t = t +1
-    # Return the best solution in the population
-    bestf = np.inf
-    for i in range(n):
-        if f(X[[i]])<bestf:
-            bestf = f(X[[i]])
-            bestsol = X[[i]]
+                bestsol = X[[i]]
+    print('\t best fitness:',bestf)
+
+    # Generate velocities
+    V = np.zeros(X.shape)
+    # Generate Frequencies
+    Qmin=0
+    Qmax=2
+    # Generate pulse rates
+    r0 = np.random.uniform(size=(n)) # init pulse rates
+    r = np.random.uniform(size=(n)) # each bat pulse rate place holder
+    # Generate Loudness
+    A = np.ones(n)
+
+    t=0
+    while t<N:
+        for i in range(n):
+            Q = Qmin + (Qmin-Qmax)*np.random.uniform()
+            V[i] = V[i] + (X[i]-bestsol)*Q
+            xi = X[i] + V[i]
+            xi = np.clip(xi,low,up)
+            #V[i] = np.clip(V[i],low/20,up/20) # clip velocity (small steps)
+
+            # Pulse rate
+            if np.random.uniform()>r[i]:
+                xi = bestsol + 0.01*np.random.normal(size=(1,D))
+                xi = np.clip(xi,low,up)
+
+            # Random walk
+            xi = xi + 0.01*np.random.normal(size=(1,D))*np.mean(A)
+            xi = np.clip(xi,low,up)
+
+            # Evaluate solution and accept it under conditions
+            if ( f(xi)<bestf and np.random.uniform()<A[i] ):
+                X[i]=xi
+                # Increase ri and reduce Ai
+                A[i]=alpha*A[i]
+                r[i]=r0[i]*(1-np.exp(-gamma*t))
+
+        # Find best current global solution
+        iter_bestf = np.inf
+        for i in range(n):
+            if f(X[[i]])<iter_bestf:
+                iter_bestf = f(X[[i]])
+                iter_bestsol = X[[i]]
+
+        # If iteration best solution is better than previous ones
+        # update
+        if iter_bestf < bestf:
+            bestf = iter_bestf
+            bestsol = iter_bestsol
+        print('\t best fitness:',bestf)
+
+        t = t + 1
     return bestsol, bestf
-
-def firefly_optimization(f, D, lower_bound, upper_bound, pop_size, hyperparams, max_iter):
-    """
-    Implements the Firefly Algorithm.
-    :param f: objective function
-    :param D: dimension of solution vectors
-    :param lower_bound: lower bound of solution vectors
-    :param upper_bound: upper bound of solution vectors
-    :param pop_size: population size
-    :param hyperparams: list containing hyperparameters: gamma, lambda_0, beta_0
-    :param max_iter: maximum number of iterations
-    :return: best solution found, best fitness
-    """
-    [gamma, lambda_0, beta_0] = hyperparams
-    population = np.clip(np.random.normal(0, np.abs(upper_bound - lower_bound) / 4, (pop_size, D)),
-                         lower_bound, upper_bound)
-    global_best_fitness, global_best_solution, population_fitness = find_best_solution(f, population)
-
-    idx = 0
-    while idx < max_iter:
-        for i in range(pop_size):
-            for j in range(pop_size):
-                j_intensity = intensity(population_fitness[j] * beta_0, gamma, distance, population[i], population[j])
-                if population_fitness[i] < j_intensity:
-                    population[i] = population[i] + intensity(beta_0, gamma, distance, population[i], population[j]) * \
-                                    (population[j] - population[i]) + \
-                                    (lambda_0 ** idx) * np.random.normal(0, 1, D)
-
-        population = np.clip(population, lower_bound, upper_bound)
-        cur_best_fitness, cur_best_solution, population_fitness = find_best_solution(f, population)
-        if cur_best_fitness > global_best_fitness:
-            global_best_fitness = cur_best_fitness
-            global_best_solution = cur_best_solution
-
-        idx += 1
-
-    return global_best_solution, global_best_fitness
-
-
-def bat_optimization(f, D, lower_bound, upper_bound, pop_size, hyperparams, max_iter):
-    """
-    Implements the Bat Algorithm.
-    :param f: objective function
-    :param D: dimension of solution vectors
-    :param lower_bound: lower bound of solution vectors
-    :param upper_bound: upper bound of solution vectors
-    :param pop_size: population size
-    :param hyperparams: list containing hyperparameters: f_max, alpha, gamma
-    :param max_iter: maximum number of iterations
-    :return: best solution found, best fitness
-    """
-    [f_max, alpha, gamma] = hyperparams
-    f_min = 0
-    sigma = 0.01
-    rf = 1
-
-    population = np.clip(np.random.normal(0, np.abs(upper_bound - lower_bound) / 4, (pop_size, D)),
-                         lower_bound, upper_bound)
-    global_best_fitness, global_best_solution, population_fitness = find_best_solution(f, population)
-    velocity = np.zeros((pop_size, D))
-    loudness = np.ones(pop_size)
-    pulse_rate = np.ones(pop_size) * 0.5
-
-    idx = 0
-    while idx < max_iter:
-        for i in range(pop_size):
-            freq_i = f_min + (f_max - f_min) * np.random.uniform(0, 1)
-            velocity[i] = velocity[i] + (population[i] - global_best_solution) * freq_i
-            temp_bat = population[i] + velocity[i]
-
-            if np.random.uniform(0, 1) > pulse_rate[i]:
-                temp_bat = global_best_solution + sigma * np.random.normal(0, 1, D)
-
-            fitness = f(np.expand_dims(temp_bat, 0))
-            if fitness > population_fitness[i] and np.random.uniform(0, 1) < loudness[i]:
-                population[i] = temp_bat
-                population_fitness[i] = fitness
-
-            loudness[i] = alpha * loudness[i]
-            pulse_rate[i] = rf * (1 - np.exp(-gamma * idx))
-
-        population = np.clip(population, lower_bound, upper_bound)
-        cur_best_fitness, cur_best_solution, population_fitness = find_best_solution(f, population)
-        if cur_best_fitness > global_best_fitness:
-            global_best_fitness = cur_best_fitness
-            global_best_solution = cur_best_solution
-
-        idx += 1
-
-    return global_best_solution, global_best_fitness
-

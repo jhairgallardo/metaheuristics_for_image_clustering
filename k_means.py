@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 def kmeans(points,num_clusters,init_centroids=None):
 
-    if init_centroids!= None:
+    if init_centroids is not None:
         centroids = np.array(init_centroids)
     else:
         rand_indx = random.sample(range(0,points.shape[0]),num_clusters)
@@ -28,7 +28,7 @@ def kmeans(points,num_clusters,init_centroids=None):
             new_centroids.append(np.mean(points[labels==i],axis=0))
         new_centroids = np.array(new_centroids)
         
-        print('kmeans iterations '+str(it),end='\r')
+        #print('kmeans iterations '+str(it),end='\r')
         # Out condition
         if np.sum(np.abs(centroids-new_centroids))==0:
             break
@@ -42,6 +42,11 @@ def kmeans(points,num_clusters,init_centroids=None):
             centroids = points[rand_indx]
             it=0
 
+    # Assign cluster
+    SAD = []
+    for centroid in centroids:
+        SAD.append(np.sum(np.abs(points-centroid),axis=1))
+    labels = np.argmin(SAD,axis=0)
     return labels, centroids
 
 
