@@ -14,12 +14,20 @@ def metaheuristic(datapoints, algo, num_clusters):
         # Reshape centroids
         pop_size = len(centroids)
         centroids = centroids.reshape(pop_size, num_clusters, datapoints.shape[1])
-        SAD = np.empty((num_clusters, datapoints.shape[0], pop_size))
+        dists = np.empty((num_clusters, datapoints.shape[0], pop_size))
         for cluster_idx in range(num_clusters):
-            SAD[cluster_idx] = distance_matrix(datapoints, centroids[:, cluster_idx, :])
+            dists[cluster_idx] = distance_matrix(datapoints, centroids[:, cluster_idx, :])
 
-        cluster_distances = np.nan_to_num(np.min(SAD, axis=0), nan=np.inf)
-        fitness = np.mean(cluster_distances, axis=0)
+        pixel_labels = np.argmin(dists, axis=0).T
+        pixel_distances = np.min(dists, axis=0).T
+
+        cluster_sums = np.empty(pop_size)
+        for pop_idx in range(pop_size):
+            for cluster_idx in range(num_clusters):
+                cluster_idxs = pixel_labels[pop_idx] == cluster_idx
+                cluster_sums[pop_idx] += np.sum(pixel_distances[pop_idx, cluster_idxs]) / len(cluster_idxs)
+        quant_error = cluster_sums / num_clusters
+        fitness = np.nan_to_num(quant_error, nan=np.inf)
         return fitness
 
     ## Parameters for all algorithms
