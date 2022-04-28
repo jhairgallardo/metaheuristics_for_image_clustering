@@ -39,7 +39,7 @@ def intra_cluster_distance(original_im, labeled_im, cluster_centers):
     :param cluster_centers: array of vectors containing cluster centers
     :return: maximum intra-cluster distance
     """
-    cluster_distances = [np.sum(distance_matrix(original_im[labeled_im == i],
+    cluster_distances = [np.nansum(distance_matrix(original_im[labeled_im == i],
                          np.expand_dims(cluster_centers[i], axis=0)))/len(labeled_im[labeled_im == i])
                          for i in range(len(cluster_centers))]
-    return np.amax(cluster_distances)
+    return np.nanmax(cluster_distances)
