@@ -81,7 +81,7 @@ def find_best_solution(population, fitness_function, maximize=False):
         best_idx = np.argmax(fitness)
     else:
         best_idx = np.argmin(fitness)
-    return fitness[best_idx], population[best_idx]
+    return fitness, fitness[best_idx], population[best_idx]
 
 
 def generate_random_sols(D, low, up, n):
@@ -263,7 +263,7 @@ def PSO(f, low, up, D, N, alpha, beta, n):
     # Generate intial velocities as zeros
     V = np.zeros(X.shape)
     # Find best current global solution
-    bestf, bestsol = find_best_solution(X, f)
+    _, bestf, bestsol = find_best_solution(X, f)
     # Initialize current best for each particle
     # as their own position (X current best: Xcb)
     Xcb = np.array(X)
@@ -283,7 +283,7 @@ def PSO(f, low, up, D, N, alpha, beta, n):
         X = np.clip(X, low, up)
         Xcb_idxs = np.argmin(np.stack((f(X), f(Xcb)), axis=1), axis=1)
         Xcb = np.array([X[i] if Xcb_idxs[i] == 0 else Xcb[i] for i in range(n)])  # should vectorize this later
-        iter_bestf, iter_bestsol = find_best_solution(X, f)
+        _, iter_bestf, iter_bestsol = find_best_solution(X, f)
         if iter_bestf < bestf:
             bestf = iter_bestf
             bestsol = iter_bestsol
@@ -321,24 +321,23 @@ def firefly(func, low, up, D, N, gamma, alpha, beta, n, flip_f=False):
     # Generate fireflies (random initial solutions)
     X = generate_random_sols(D, low, up, n)
     # Find best current global solution
-    bestf, bestsol = find_best_solution(X, f, maximize=True)
+    fitness, bestf, bestsol = find_best_solution(X, f, maximize=True)
     print('\t best fitness:', bestf)
 
     t = 0
     while t < N:
         for i in range(n):
             for j in range(n):
-                Ii = f(X[[i]])
-                Ij = f(X[[j]])
-                if Ii < Ij:
+                if fitness[i] < fitness[j]:
                     rij = np.sqrt(np.sum((X[i] - X[j]) ** 2))
                     eps = np.random.normal(size=(1, D))
                     # Move xi towards xj
                     X[i] = X[i] + (beta / (1 + gamma * rij**2))*(X[j]-X[i]) + alpha * eps
                     # Clip values to boundaries
                     X[i] = np.clip(X[i], low, up)
+
         # Find best current global solution
-        iter_bestf, iter_bestsol = find_best_solution(X, f, maximize=True)
+        fitness, iter_bestf, iter_bestsol = find_best_solution(X, f, maximize=True)
 
         # If iteration best solution is better than previous ones
         # update
