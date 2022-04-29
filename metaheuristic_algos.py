@@ -25,9 +25,13 @@ def metaheuristic(datapoints, algo, num_clusters):
         for pop_idx in range(pop_size):
             for cluster_idx in range(num_clusters):
                 cluster_idxs = pixel_labels[pop_idx] == cluster_idx
-                cluster_sums[pop_idx] += np.sum(pixel_distances[pop_idx, cluster_idxs]) / len(cluster_idxs)
-        quant_error = cluster_sums / num_clusters
-        fitness = np.nan_to_num(quant_error, nan=np.inf)
+                cur_sum = np.sum(pixel_distances[pop_idx, cluster_idxs]) / len(cluster_idxs)
+                if np.isnan(cur_sum):
+                    # check to penalize empty clusters
+                    cluster_sums[pop_idx] = np.inf
+                    break
+                cluster_sums[pop_idx] += cur_sum
+        fitness = cluster_sums / num_clusters
         return fitness
 
     ## Parameters for all algorithms
