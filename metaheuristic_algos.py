@@ -384,7 +384,6 @@ def firefly(func, low, up, D, N, gamma, alpha, beta, n, flip_f=False):
                     X[i] = X[i] + (beta / (1 + gamma * rij**2))*(X[j]-X[i]) + alpha * eps
                     # Clip values to boundaries
                     X[i] = np.clip(X[i], low, up)
-                    fitness[i] = f(X[[i]])
 
         # Find best current global solution
         iter_bestf = -np.inf
