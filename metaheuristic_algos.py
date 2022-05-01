@@ -356,6 +356,21 @@ def firefly(func, low, up, D, N, gamma, alpha, beta, n, flip_f=False):
         if fitness[i]>bestf:
             bestf = fitness[i]
             bestsol = X[[i]]
+
+    # if none of the random generate fireflies
+    # give me a better solution thatn -np.inf
+    # regenerate fireflies
+    while bestf == -np.inf:
+        X = generate_random_sols(D, low, up, n)
+        # Find best current global solution
+        bestf = -np.inf
+        fitness = np.empty(n)
+        for i in range(n):
+            fitness[i]= f(X[[i]])
+            if fitness[i]>bestf:
+                bestf = fitness[i]
+                bestsol = X[[i]]
+
     print('\t best fitness:',bestf)
 
     t = 0
@@ -369,6 +384,7 @@ def firefly(func, low, up, D, N, gamma, alpha, beta, n, flip_f=False):
                     X[i] = X[i] + (beta / (1 + gamma * rij**2))*(X[j]-X[i]) + alpha * eps
                     # Clip values to boundaries
                     X[i] = np.clip(X[i], low, up)
+                    fitness[i] = f(X[[i]])
 
         # Find best current global solution
         iter_bestf = -np.inf
