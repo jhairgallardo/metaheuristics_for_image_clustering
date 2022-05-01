@@ -46,7 +46,7 @@ def main(img_name,num_clusters,algorithm):
 if __name__ == '__main__':
     ## Input image and number of clusters
     input_dict = {0:['lena', 6], 1:['tiger',8], 2:['cameraman', 4], 3:['coins', 2]} # .jpg images
-    img_idx = 3 # (Change this line to use different images)
+    img_idx = 1 # (Change this line to use different images)
     img_name = input_dict[img_idx][0] # lena, cameraman, coins
     num_clusters = input_dict[img_idx][1] # 6 for lena, 4 for cameraman, 2 for coins 
     

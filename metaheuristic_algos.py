@@ -11,27 +11,23 @@ def metaheuristic(datapoints, algo, num_clusters):
         :param centroids: set of clusters solution
         Note: We want to minimize this function
         '''
-        # Reshape centroids
-        pop_size = len(centroids)
-        centroids = centroids.reshape(pop_size, num_clusters, datapoints.shape[1])
-        dists = np.empty((num_clusters, datapoints.shape[0], pop_size))
-        for cluster_idx in range(num_clusters):
-            dists[cluster_idx] = distance_matrix(datapoints, centroids[:, cluster_idx, :])
+        # Reshape centroids 
+        centroids = centroids.reshape(num_clusters,datapoints.shape[1])
+        # Assign cluster to datapoints
+        SAD = [] # Sum of absolute distance
+        for c in centroids:
+            SAD.append(np.sum(np.abs(datapoints-c),axis=1))
+        labels = np.argmin(SAD,axis=0)
 
-        pixel_labels = np.argmin(dists, axis=0).T
-        pixel_distances = np.min(dists, axis=0).T
-
-        cluster_sums = np.empty(pop_size)
-        for pop_idx in range(pop_size):
-            for cluster_idx in range(num_clusters):
-                cluster_idxs = pixel_labels[pop_idx] == cluster_idx
-                cur_sum = np.sum(pixel_distances[pop_idx, cluster_idxs]) / len(cluster_idxs)
-                if np.isnan(cur_sum):
-                    # check to penalize empty clusters
-                    cluster_sums[pop_idx] = np.inf
-                    break
-                cluster_sums[pop_idx] += cur_sum
-        fitness = cluster_sums / num_clusters
+        # Calculate the Quantization error
+        cluster_distances = [np.sum(distance_matrix(datapoints[labels == i],
+                         np.expand_dims(centroids[i], axis=0)))/len(labels[labels == i])
+                         for i in range(len(centroids))]
+        # Sometimes a cluster won't have points, returning a nan for its distance
+        # I am replacing that nan with Inf, since we don't want those types of
+        # solutions
+        cluster_distances = np.nan_to_num(cluster_distances, nan=np.inf)
+        fitness = np.mean(cluster_distances)
         return fitness
 
     ## Parameters for all algorithms
@@ -87,13 +83,13 @@ def metaheuristic(datapoints, algo, num_clusters):
     return labels, centroids
 
 
-def find_best_solution(population, fitness_function, maximize=False):
-    fitness = fitness_function(population)
-    if maximize:
-        best_idx = np.argmax(fitness)
-    else:
-        best_idx = np.argmin(fitness)
-    return fitness, fitness[best_idx], population[best_idx]
+# def find_best_solution(population, fitness_function, maximize=False):
+#     fitness = fitness_function(population)
+#     if maximize:
+#         best_idx = np.argmax(fitness)
+#     else:
+#         best_idx = np.argmin(fitness)
+#     return fitness, fitness[best_idx], population[best_idx]
 
 
 def generate_random_sols(D, low, up, n):
@@ -275,33 +271,53 @@ def PSO(f, low, up, D, N, alpha, beta, n):
     # Generate intial velocities as zeros
     V = np.zeros(X.shape)
     # Find best current global solution
-    _, bestf, bestsol = find_best_solution(X, f)
+    bestf = np.inf
+    g = X[[0]]
+    for i in range(n):
+        if f(X[[i]])<bestf:
+            bestf = f(X[[i]])
+            bestsol = X[[i]]
+            g = X[[i]]
     # Initialize current best for each particle
     # as their own position (X current best: Xcb)
     Xcb = np.array(X)
 
     print('\t best fitness:', bestf)
 
-    t = 0
-    while t < N:
-        e1 = np.random.uniform(0, 1, (n, D))
-        e2 = np.random.uniform(0, 1, (n, D))
+    t=0
+    while t<N:
+        for i in range(n): # For each particle
+            # Generate noise vectors
+            e1 = np.random.rand(D)
+            e2 = np.random.rand(D)
+            # Generate new velocities
+            social = alpha*e1*(g[0]-X[i])
+            cognitive = beta*e2*(Xcb[i] -X[i])
+            V[i] = V[i] + social + cognitive
+            V[i] = np.clip(V[i],-up/5,up/5) # clip velocity (small steps)
+            # Calculate new locations
+            X[i] = X[i] + V[i]
+            X[i] = np.clip(X[i],low,up) # make sure it stay in bounds
+            # Find the current best of the particle
+            if f(X[[i]]) < f(Xcb[[i]]):
+                Xcb[i] = X[i]
 
-        social = alpha * e1 * (bestsol - X)
-        cognitive = beta * e2 * (Xcb - X)
-        V = V + social + cognitive
-        V = np.clip(V, -up / 5, up / 5)
-        X = X + V
-        X = np.clip(X, low, up)
-        Xcb_idxs = np.argmin(np.stack((f(X), f(Xcb)), axis=1), axis=1)
-        Xcb = np.array([X[i] if Xcb_idxs[i] == 0 else Xcb[i] for i in range(n)])  # should vectorize this later
-        _, iter_bestf, iter_bestsol = find_best_solution(X, f)
+        # Find best current global solution
+        iter_bestf = np.inf
+        for i in range(n):
+            if f(X[[i]])<iter_bestf:
+                iter_bestf = f(X[[i]])
+                iter_bestsol = X[[i]]
+                g = X[[i]]
+
+        # If iteration best solution is better than previous ones
+        # update
         if iter_bestf < bestf:
             bestf = iter_bestf
             bestsol = iter_bestsol
 
-        print('\t best fitness:', bestf)
-        t = t + 1
+        print('\t best fitness:',bestf)
+        t = t +1
     return bestsol, bestf
 
 
@@ -333,8 +349,14 @@ def firefly(func, low, up, D, N, gamma, alpha, beta, n, flip_f=False):
     # Generate fireflies (random initial solutions)
     X = generate_random_sols(D, low, up, n)
     # Find best current global solution
-    fitness, bestf, bestsol = find_best_solution(X, f, maximize=True)
-    print('\t best fitness:', bestf)
+    bestf = -np.inf
+    fitness = np.empty(n)
+    for i in range(n):
+        fitness[i]= f(X[[i]])
+        if fitness[i]>bestf:
+            bestf = fitness[i]
+            bestsol = X[[i]]
+    print('\t best fitness:',bestf)
 
     t = 0
     while t < N:
@@ -349,7 +371,12 @@ def firefly(func, low, up, D, N, gamma, alpha, beta, n, flip_f=False):
                     X[i] = np.clip(X[i], low, up)
 
         # Find best current global solution
-        fitness, iter_bestf, iter_bestsol = find_best_solution(X, f, maximize=True)
+        iter_bestf = -np.inf
+        for i in range(n):
+            fitness[i]= f(X[[i]])
+            if fitness[i]>iter_bestf:
+                iter_bestf = fitness[i]
+                iter_bestsol = X[[i]]
 
         # If iteration best solution is better than previous ones
         # update
