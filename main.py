@@ -46,7 +46,7 @@ def main(img_name,num_clusters,algorithm):
 if __name__ == '__main__':
     ## Input image and number of clusters
     input_dict = {0:['lena', 6], 1:['tiger',8], 2:['cameraman', 4], 3:['coins', 2]} # .jpg images
-    img_idx = 1 # (Change this line to use different images)
+    img_idx = 0 # (Change this line to use different images)
     img_name = input_dict[img_idx][0] # lena, cameraman, coins
     num_clusters = input_dict[img_idx][1] # 6 for lena, 4 for cameraman, 2 for coins 
     
@@ -61,7 +61,7 @@ if __name__ == '__main__':
                  'PSO'   : {'name':'PSO', 'alpha':1.5, 'beta':0.5, 'pop_size':20, 'iter':50, 'clusters': num_clusters},
                  'DE'    : {'name':'DE', 'F':1.0, 'Cr':0.5, 'pop_size':20, 'iter':50, 'clusters': num_clusters},
                  'SA'    : {'name':'SA', 'init_temp':10, 'beta':0.8, 'iter':1000, 'clusters': num_clusters}, # 1000 iters to be fair against pop based algos (20x50)
-                 'FA'    : {'name':'FA', 'gamma':1, 'alpha':0.1, 'beta':1, 'pop_size':20, 'iter':50, 'clusters': num_clusters},
+                 'FA'    : {'name':'FA', 'gamma':0.0001, 'alpha':0.1, 'beta':1, 'pop_size':20, 'iter':50, 'clusters': num_clusters},
                  'BA'    : {'name':'BA', 'alpha':0.8, 'gamma':0.9, 'pop_size':20, 'iter':50, 'clusters': num_clusters}
                 }
 
